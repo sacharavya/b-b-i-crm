@@ -49,3 +49,29 @@ Only the flags in `PERMISSION_OVERRIDABLE` (currently
 `review_documents`) can be overridden per-staff via
 `crm.staff.permission_overrides`. Anything else is role-only — putting
 it in the JSONB has no effect.
+
+# Engineering workflows
+
+Curated Claude Code tooling vendored from
+[`sagunji/eng-workflows`](https://github.com/sagunji/eng-workflows) (MIT).
+Files live under `.claude/commands/` and `.claude/skills/`.
+
+**Slash commands**
+
+- `/preflight` — pre-commit gate (secrets, debug artefacts, test
+  alignment, diff sanity). Run before every commit.
+- `/council-review` — five-role quality review (architecture, QA,
+  security, DX, maintenance) for a branch or PR.
+- `/architecture` — codebase audit for drift, coupling, gaps.
+
+**Auto-triggering skills** (loaded by description, no manual invoke)
+
+- `code-reviewer` — quality + anti-pattern review on a paste/diff.
+- `db-schema-reviewer` — migration / schema design review (high
+  signal here: each migration in `supabase/migrations/` is worth
+  running through this).
+- `debug-detective` — error / runtime diagnosis.
+- `pr-describer` — generates PR descriptions from a branch diff.
+- `security-auditor` — input-to-output trace, exploit paths.
+- `test-writer` — produces test coverage. The CRM has no test suite
+  yet; this skill is the on-ramp.

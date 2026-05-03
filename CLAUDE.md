@@ -75,3 +75,27 @@ Files live under `.claude/commands/` and `.claude/skills/`.
 - `security-auditor` — input-to-output trace, exploit paths.
 - `test-writer` — produces test coverage. The CRM has no test suite
   yet; this skill is the on-ramp.
+
+## Delete authority
+
+Three permissions control destructive (hard-delete) operations on core
+records: `delete_cases`, `delete_clients`, `delete_checklists`. All three
+are super_user only and NOT overridable per-staff. Admins, RCICs, and
+other roles can deactivate or archive but cannot permanently delete
+these records. The non-overridability is enforced in three places that
+must agree:
+
+- **TS**: `NON_OVERRIDABLE_PERMISSIONS` in
+  `src/lib/auth/permissions.ts` — `staffCan()` skips any
+  `permission_overrides` value for these keys and falls through to the
+  role table.
+- **SQL**: the early `IF p_permission IN (...) THEN RETURN v_role =
+  'super_user'` branch in `crm.staff_can()` (migration
+  `20260502000007_tighten_delete_permissions.sql`).
+- **RLS**: `crm.cases.cases_delete`, `crm.clients.clients_delete`, and
+  the per-command `service_types_delete` / `service_templates_delete`
+  policies all route through `staff_can()`.
+
+When wiring new delete UI, gate the trigger with `staffCan()` (or
+`<Can>`) AND re-check it inside the server action as defense in depth.
+UI gating alone is not sufficient.

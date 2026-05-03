@@ -48,7 +48,9 @@ export type Permission =
   | "manage_admins"
   | "reset_passwords"
   | "export_data"
-  | "change_system_settings";
+  | "change_system_settings"
+  | "manage_templates"
+  | "delete_checklists";
 
 export type StaffWithOverrides = {
   id: string;
@@ -89,12 +91,18 @@ const ALL_PERMISSIONS: ReadonlyArray<Permission> = [
   "reset_passwords",
   "export_data",
   "change_system_settings",
+  "manage_templates",
+  "delete_checklists",
 ];
 
 const ADMIN_DENIED: ReadonlySet<Permission> = new Set([
   "manage_super_users",
   "manage_admins",
   "change_system_settings",
+  // PERM-1: delete authority is super_user only.
+  "delete_cases",
+  "delete_clients",
+  "delete_checklists",
 ]);
 
 const RCIC_PERMS: ReadonlyArray<Permission> = [
@@ -118,6 +126,7 @@ const RCIC_PERMS: ReadonlyArray<Permission> = [
   "edit_invoices",
   "view_intake_form",
   "edit_intake_form",
+  "manage_templates",
 ];
 
 const DOCUMENT_OFFICER_PERMS: ReadonlyArray<Permission> = [
@@ -176,15 +185,27 @@ export const ROLE_PERMISSIONS: Readonly<
 };
 
 /**
+ * Permissions that CANNOT be overridden per-staff under any circumstances.
+ * Even if `permission_overrides` JSONB carries `delete_cases: true` on an
+ * admin row, staffCan() ignores it and falls through to the role default
+ * (which is FALSE for everyone except super_user). Mirrors the same guard
+ * in crm.staff_can() so RLS and app-layer checks agree.
+ */
+export const NON_OVERRIDABLE_PERMISSIONS: ReadonlySet<Permission> = new Set([
+  "delete_cases",
+  "delete_clients",
+  "delete_checklists",
+]);
+
+/**
  * Permissions a super_user or admin can override per-staff via the
  * permission_overrides JSONB. Anything not listed here is role-only —
- * trying to set it in the JSON has no effect.
+ * trying to set it in the JSON has no effect. The destructive delete_*
+ * permissions are deliberately excluded; see NON_OVERRIDABLE_PERMISSIONS.
  */
 export const PERMISSION_OVERRIDABLE: ReadonlySet<Permission> = new Set([
   "view_financials",
   "export_data",
-  "delete_cases",
-  "delete_clients",
   "review_documents",
 ]);
 
@@ -192,6 +213,10 @@ export function staffCan(
   staff: StaffWithOverrides,
   permission: Permission,
 ): boolean {
+  // Non-overridable destructive permissions: ignore overrides entirely.
+  if (NON_OVERRIDABLE_PERMISSIONS.has(permission)) {
+    return ROLE_PERMISSIONS[staff.role].has(permission);
+  }
   if (PERMISSION_OVERRIDABLE.has(permission)) {
     const override = staff.permission_overrides[permission];
     if (typeof override === "boolean") return override;

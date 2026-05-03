@@ -10,7 +10,10 @@
     "db:reset": "supabase db reset",
     "db:migrate": "supabase db push",
     "db:diff": "supabase db diff -f",
-    "graph:test": "tsx --env-file=.env.local scripts/test-graph.ts"
+    "graph:test": "tsx --env-file=.env.local scripts/test-graph.ts",
+    "bootstrap": "tsx --env-file=.env.local scripts/bootstrap-superuser.ts",
+    "wipe:checklists": "tsx --env-file=.env.local scripts/wipe-checklists.ts",
+    "db:types": "supabase gen types typescript --linked --schema crm,files,portal,audit,ref"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

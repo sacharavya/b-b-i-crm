@@ -78,6 +78,8 @@ const PERMISSION_LABEL: Record<Permission, string> = {
   reset_passwords: "Reset passwords",
   export_data: "Export data",
   change_system_settings: "Change system settings",
+  manage_templates: "Manage templates",
+  delete_checklists: "Delete checklists",
 };
 
 type OverrideChoice = "default" | "allow" | "deny";

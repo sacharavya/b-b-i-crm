@@ -54,18 +54,115 @@ export const STATUS_LABEL: Record<CaseStatus, string> = {
   closed: "Closed",
 };
 
+// ---------------------------------------------------------------------------
+// Milestone vocabulary
+//
+// Each milestone is a real-world event the firm records ("Submitted to IRCC",
+// "Biometrics done"). Recording a milestone advances the case to the
+// corresponding status. The set of milestones reachable from a given status
+// is encoded by `nextMilestones()`.
+// ---------------------------------------------------------------------------
+
+export type Milestone =
+  | "documents_in_progress"
+  | "review_started"
+  | "submitted_to_ircc"
+  | "biometrics_pending"
+  | "biometrics_done"
+  | "awaiting_decision"
+  | "decision_approved"
+  | "decision_refused"
+  | "decision_info_requested"
+  | "resubmitted"
+  | "case_closed";
+
+export const MILESTONE_STATUS: Record<Milestone, CaseStatus> = {
+  documents_in_progress: "documentation_in_progress",
+  review_started: "documentation_review",
+  submitted_to_ircc: "submitted_to_ircc",
+  biometrics_pending: "biometrics_pending",
+  biometrics_done: "biometrics_completed",
+  awaiting_decision: "awaiting_decision",
+  decision_approved: "passport_requested",
+  decision_refused: "refused",
+  decision_info_requested: "additional_info_requested",
+  resubmitted: "submitted_to_ircc",
+  case_closed: "closed",
+};
+
+export const MILESTONE_LABEL: Record<Milestone, string> = {
+  documents_in_progress: "Start collecting documents",
+  review_started: "Begin review",
+  submitted_to_ircc: "Submitted to IRCC",
+  biometrics_pending: "Biometrics requested",
+  biometrics_done: "Biometrics completed",
+  awaiting_decision: "Awaiting IRCC decision",
+  decision_approved: "Decision: passport requested",
+  decision_refused: "Decision: refused",
+  decision_info_requested: "IRCC requested more info",
+  resubmitted: "Resubmitted to IRCC",
+  case_closed: "Close case",
+};
+
+// Refused is irreversible — UI surfaces an extra confirm step on this milestone.
+export const MILESTONE_NEEDS_CONFIRM: ReadonlySet<Milestone> = new Set<Milestone>([
+  "decision_refused",
+]);
+
 /**
- * Linear forward target for statuses that advance to a single next status.
- * Branching statuses (awaiting_decision, additional_info_requested) are not
- * keyed here — the UI presents multiple options instead.
+ * The milestones validly reachable from `status`. Empty for closed cases.
  */
-export const LINEAR_NEXT: Partial<Record<CaseStatus, CaseStatus>> = {
-  retainer_signed: "documentation_in_progress",
-  documentation_in_progress: "documentation_review",
-  documentation_review: "submitted_to_ircc",
-  submitted_to_ircc: "biometrics_pending",
-  biometrics_pending: "biometrics_completed",
-  biometrics_completed: "awaiting_decision",
-  passport_requested: "closed",
-  refused: "closed",
+export function nextMilestones(status: CaseStatus): Milestone[] {
+  switch (status) {
+    case "retainer_signed":
+      return ["documents_in_progress"];
+    case "documentation_in_progress":
+      return ["review_started"];
+    case "documentation_review":
+      return ["submitted_to_ircc"];
+    case "submitted_to_ircc":
+      return ["biometrics_pending", "awaiting_decision"];
+    case "biometrics_pending":
+      return ["biometrics_done"];
+    case "biometrics_completed":
+      return ["awaiting_decision"];
+    case "awaiting_decision":
+      return ["decision_approved", "decision_info_requested", "decision_refused"];
+    case "additional_info_requested":
+      return ["resubmitted", "case_closed"];
+    case "passport_requested":
+    case "refused":
+      return ["case_closed"];
+    case "closed":
+      return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// "Waiting on" — derived from status. Drives a chip next to the pipeline
+// and a colored dot on each board card so the daily view answers "what
+// should I touch today?" at a glance.
+// ---------------------------------------------------------------------------
+
+export type WaitingParty = "client" | "ircc" | "us" | "none";
+
+export const WAITING_LABEL: Record<WaitingParty, string> = {
+  client: "Waiting on client",
+  ircc: "Waiting on IRCC",
+  us: "Action on us",
+  none: "Closed",
+};
+
+export const WAITING_ON: Record<CaseStatus, WaitingParty> = {
+  retainer_signed: "us",
+  documentation_in_progress: "client",
+  documentation_review: "us",
+  submitted_to_ircc: "ircc",
+  biometrics_pending: "client",
+  biometrics_completed: "ircc",
+  awaiting_decision: "ircc",
+  passport_requested: "client",
+  additional_info_requested: "client",
+  refused: "us",
+  closed: "none",
 };

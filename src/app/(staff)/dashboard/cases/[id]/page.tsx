@@ -10,12 +10,15 @@ import { getStaff } from "@/lib/auth/staff";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 
-import { AdvanceDialog } from "./_components/advance-dialog";
+import { getIntakeProgress } from "@/lib/intake/completeness";
+
 import {
   AssignmentCard,
   type StaffOption,
 } from "./_components/assignment-card";
 import { CaseTabs, VALID_TABS, type Tab } from "./_components/case-tabs";
+import { DeleteCaseTrigger } from "./_components/delete-case-trigger";
+import { IntakeBanner } from "./_components/intake-banner";
 import {
   DocumentChecklist,
   type LatestDoc,
@@ -23,6 +26,11 @@ import {
 import { OneDriveCard } from "./_components/onedrive-card";
 import { PhasePipeline } from "./_components/phase-pipeline";
 import { RecordPaymentTrigger } from "./_components/record-payment-trigger";
+import {
+  TimelineActions,
+  TimelineList,
+  type TimelineEvent,
+} from "./_components/timeline-panel";
 
 type CaseStatus = Database["crm"]["Enums"]["case_status"];
 
@@ -116,6 +124,7 @@ export default async function CasePage({ params, searchParams }: Props) {
     paymentsRes,
     tasksRes,
     staffRes,
+    eventsRes,
   ] = await Promise.all([
     supabase
       .schema("crm")
@@ -133,7 +142,19 @@ export default async function CasePage({ params, searchParams }: Props) {
       .schema("ref")
       .from("template_documents")
       .select(
-        "document_code, document_label, category, is_required, condition_label, display_order",
+        `
+          document_code,
+          document_label,
+          group_code,
+          is_required,
+          condition_label,
+          display_order,
+          allowed_file_types,
+          max_file_size_mb,
+          instructions,
+          expected_quantity,
+          group:checklist_groups(name, display_order)
+        `,
       )
       .eq("service_template_id", caseRow.service_template_id)
       .order("display_order"),
@@ -166,15 +187,121 @@ export default async function CasePage({ params, searchParams }: Props) {
       .is("deleted_at", null)
       .eq("is_active", true)
       .order("last_name", { ascending: true }),
+    supabase
+      .schema("crm")
+      .from("case_events")
+      .select(
+        `
+          id,
+          occurred_at,
+          description,
+          event_data,
+          recorder:staff!case_events_created_by_fkey(first_name, last_name)
+        `,
+      )
+      .eq("case_id", id)
+      .order("occurred_at", { ascending: false })
+      .limit(50),
   ]);
 
   const client = clientRes.data;
   const service = serviceRes.data;
+
+  // Intake banner — fetch the full client row + all 8 support tables and
+  // compute completeness. Adds a parallel round-trip but the banner is
+  // important enough that the page should always reflect current state.
+  const [
+    fullClientRes,
+    intakeFamilyRes,
+    intakeEducationRes,
+    intakeEmploymentRes,
+    intakeTravelRes,
+    intakeAddressRes,
+    intakeOrgsRes,
+    intakeGovRes,
+    intakeMilRes,
+  ] = await Promise.all([
+    supabase
+      .schema("crm")
+      .from("clients")
+      .select("*")
+      .eq("id", caseRow.client_id)
+      .maybeSingle(),
+    supabase
+      .schema("crm")
+      .from("client_family_members")
+      .select("*")
+      .eq("client_id", caseRow.client_id),
+    supabase
+      .schema("crm")
+      .from("client_education_history")
+      .select("*")
+      .eq("client_id", caseRow.client_id),
+    supabase
+      .schema("crm")
+      .from("client_employment_history")
+      .select("*")
+      .eq("client_id", caseRow.client_id),
+    supabase
+      .schema("crm")
+      .from("client_travel_history")
+      .select("*")
+      .eq("client_id", caseRow.client_id),
+    supabase
+      .schema("crm")
+      .from("client_address_history")
+      .select("*")
+      .eq("client_id", caseRow.client_id),
+    supabase
+      .schema("crm")
+      .from("client_organisations")
+      .select("*")
+      .eq("client_id", caseRow.client_id),
+    supabase
+      .schema("crm")
+      .from("client_government_positions")
+      .select("*")
+      .eq("client_id", caseRow.client_id),
+    supabase
+      .schema("crm")
+      .from("client_military_services")
+      .select("*")
+      .eq("client_id", caseRow.client_id),
+  ]);
+
+  const intakeProgress = fullClientRes.data
+    ? getIntakeProgress(fullClientRes.data, {
+        family: intakeFamilyRes.data ?? [],
+        education: intakeEducationRes.data ?? [],
+        employment: intakeEmploymentRes.data ?? [],
+        travel: intakeTravelRes.data ?? [],
+        addresses: intakeAddressRes.data ?? [],
+        organisations: intakeOrgsRes.data ?? [],
+        government: intakeGovRes.data ?? [],
+        military: intakeMilRes.data ?? [],
+      })
+    : null;
+  const intakeMissing = intakeProgress
+    ? intakeProgress.total - intakeProgress.complete
+    : 0;
   const templateDocs = templateDocsRes.data ?? [];
   const uploadedDocs = uploadedDocsRes.data ?? [];
   const payments = paymentsRes.data ?? [];
   const tasks = tasksRes.data ?? [];
   const allStaff = staffRes.data ?? [];
+  const timelineEvents: TimelineEvent[] = (eventsRes.data ?? []).map((row) => {
+    const data = (row.event_data ?? null) as { milestone?: string } | null;
+    const recorder = row.recorder
+      ? `${row.recorder.first_name} ${row.recorder.last_name}`.trim()
+      : null;
+    return {
+      id: row.id,
+      occurredAt: row.occurred_at,
+      description: row.description,
+      recorderName: recorder,
+      milestone: data?.milestone ?? null,
+    };
+  });
 
   // Role-based gating is intentionally off for now — assignment is open
   // to any active staff member. We'll narrow this down later once the
@@ -246,6 +373,14 @@ export default async function CasePage({ params, searchParams }: Props) {
           </div>
         )}
 
+        {intakeProgress && intakeMissing > 0 && (
+          <IntakeBanner
+            clientId={caseRow.client_id}
+            missing={intakeMissing}
+            total={intakeProgress.total}
+          />
+        )}
+
         {/* Header card */}
         <Card>
           <CardContent className="flex items-start justify-between gap-6 p-6">
@@ -258,16 +393,24 @@ export default async function CasePage({ params, searchParams }: Props) {
                 {format(new Date(caseRow.opened_at), "MMM d, yyyy")}
               </p>
             </div>
-            <Badge
-              className={`${pill.className} shrink-0 rounded-full px-3 py-1 font-medium`}
-            >
-              {pill.label}
-            </Badge>
+            <div className="flex flex-col items-end gap-2">
+              <Badge
+                className={`${pill.className} shrink-0 rounded-full px-3 py-1 font-medium`}
+              >
+                {pill.label}
+              </Badge>
+              {me && canEditCase && staffCan(me, "delete_cases") && (
+                <DeleteCaseTrigger
+                  caseId={caseRow.id}
+                  caseNumber={caseRow.case_number}
+                />
+              )}
+            </div>
           </CardContent>
         </Card>
 
         <PhasePipeline status={caseRow.status}>
-          <AdvanceDialog
+          <TimelineActions
             caseId={caseRow.id}
             currentStatus={caseRow.status}
             quotedFeeCad={quoted}
@@ -372,6 +515,21 @@ export default async function CasePage({ params, searchParams }: Props) {
               </Card>
             </aside>
           </div>
+        ) : tab === "activity" ? (
+          <Card>
+            <CardContent className="space-y-3 p-6">
+              <div>
+                <h2 className="text-sm font-semibold tracking-tight text-stone-700">
+                  Timeline
+                </h2>
+                <p className="text-xs text-stone-500">
+                  Real-world events recorded against this case. Status is
+                  derived from the most recent milestone.
+                </p>
+              </div>
+              <TimelineList events={timelineEvents} />
+            </CardContent>
+          </Card>
         ) : (
           <Card>
             <CardContent className="p-6 text-center text-stone-500">

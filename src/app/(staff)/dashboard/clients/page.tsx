@@ -1,8 +1,11 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { buttonVariants } from "@/components/ui/button";
 import { staffCan } from "@/lib/auth/permissions";
 import { getStaff } from "@/lib/auth/staff";
 import { createClient } from "@/lib/supabase/server";
+import { cn } from "@/lib/utils/index";
 
 import { ClientsTable, type ClientRow } from "./_components/clients-table";
 
@@ -73,6 +76,7 @@ export default async function ClientsPage() {
   }));
 
   const total = rows.length;
+  const canCreateClients = staffCan(me, "create_clients");
 
   return (
     <main className="mx-auto max-w-7xl space-y-6 px-6 py-8">
@@ -87,6 +91,14 @@ export default async function ClientsPage() {
               : `${total} client${total === 1 ? "" : "s"}.`}
           </p>
         </div>
+        {canCreateClients && (
+          <Link
+            href="/dashboard/clients/new"
+            className={cn(buttonVariants({ size: "sm" }))}
+          >
+            + New client
+          </Link>
+        )}
       </div>
 
       <ClientsTable rows={rows} />

@@ -105,6 +105,8 @@ export default async function DashboardPage() {
   const canClients = staffCan(me, "view_clients");
   const canFinancials = staffCan(me, "view_financials");
   const canTasks = staffCan(me, "view_tasks");
+  const canCreateCases = staffCan(me, "create_cases");
+  const canCreateClients = staffCan(me, "create_clients");
   const supabase = await createClient();
 
   const monthStart = startOfMonthISO();
@@ -221,13 +223,37 @@ export default async function DashboardPage() {
 
   return (
     <main className="mx-auto max-w-7xl space-y-8 px-6 py-8">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold tracking-tight text-[var(--navy)]">
-          Welcome back, {me.first_name}
-        </h1>
-        <p className="text-sm text-stone-500">
-          Here&apos;s how the firm is tracking right now.
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--navy)]">
+            Welcome back, {me.first_name}
+          </h1>
+          <p className="text-sm text-stone-500">
+            Here&apos;s how the firm is tracking right now.
+          </p>
+        </div>
+        {(canCreateCases || canCreateClients) && (
+          <div className="flex shrink-0 items-center gap-2">
+            {canCreateClients && (
+              <Link
+                href="/dashboard/clients/new"
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "sm" }),
+                )}
+              >
+                + New client
+              </Link>
+            )}
+            {canCreateCases && (
+              <Link
+                href="/dashboard/cases/new"
+                className={cn(buttonVariants({ size: "sm" }))}
+              >
+                + New case
+              </Link>
+            )}
+          </div>
+        )}
       </div>
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">

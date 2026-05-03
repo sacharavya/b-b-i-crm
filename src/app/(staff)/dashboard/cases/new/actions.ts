@@ -95,25 +95,25 @@ export async function createCase(
     clientId = newClient.id;
   }
 
-  // Find the latest active service_template for the chosen service_type
-  const today = new Date().toISOString().slice(0, 10);
-  const { data: template } = await supabase
+  // Resolve the snapshot template via the SQL helper. Defensive against the
+  // race where the variant was deactivated (or its template expired)
+  // between the wizard load and submit.
+  const { data: templateId, error: tplErr } = await supabase
     .schema("ref")
-    .from("service_templates")
-    .select("id")
-    .eq("service_type_id", parsed.data.service_type_id)
-    .lte("effective_from", today)
-    .or(`effective_to.is.null,effective_to.gte.${today}`)
-    .order("version", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .rpc("active_template_for_variant", {
+      p_service_type_id: parsed.data.service_type_id,
+    });
 
-  if (!template) {
+  if (tplErr) {
+    return { error: `Could not resolve checklist: ${tplErr.message}` };
+  }
+  if (!templateId) {
     return {
       error:
-        "Checklist not yet defined for this service. Add a service template before opening cases for it.",
+        "Selected variant has no active checklist. Choose another variant.",
     };
   }
+  const template = { id: templateId as string };
 
   // Generate case number
   const { data: caseNumber, error: caseNumErr } = await supabase

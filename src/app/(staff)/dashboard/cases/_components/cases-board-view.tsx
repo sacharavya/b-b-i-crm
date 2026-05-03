@@ -23,9 +23,25 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { assigneeColor } from "@/lib/utils/assignee-color";
 import { cn } from "@/lib/utils/index";
-import { phaseIndex, PHASE_LABELS, type CaseStatus } from "@/lib/utils/phase";
+import {
+  MILESTONE_STATUS,
+  PHASE_LABELS,
+  WAITING_ON,
+  WAITING_LABEL,
+  phaseIndex,
+  type CaseStatus,
+  type Milestone,
+  type WaitingParty,
+} from "@/lib/utils/phase";
 
-import { advancePhase } from "../[id]/actions";
+import { recordEvent } from "../[id]/actions";
+
+const WAITING_DOT: Record<WaitingParty, string> = {
+  client: "bg-blue-500",
+  ircc: "bg-amber-500",
+  us: "bg-rose-500",
+  none: "bg-stone-300",
+};
 
 export type BoardCase = {
   id: string;
@@ -75,16 +91,14 @@ const statusPill: Record<CaseStatus, { label: string; className: string }> = {
   closed: { label: "Closed", className: "bg-gray-200 text-gray-700" },
 };
 
-// Default landing status when a card is dropped onto a phase column.
-// Phase 6 is intentionally not a drop target — outcomes (passport
-// requested / refused / additional info) are decisions that should go
-// through the AdvanceDialog on the case detail page so the user picks
-// explicitly. Same reason we don't auto-pick within phase 5: the entry
-// point is biometrics_pending; further sub-states require the dialog.
-const PHASE_DROP_TARGET: Partial<Record<number, CaseStatus>> = {
-  1: "retainer_signed",
-  2: "documentation_in_progress",
-  3: "documentation_review",
+// Milestone recorded when a card is dropped onto a phase column.
+// Phase 1 / phase 6 are intentionally not drop targets — phase 1 has no
+// "open the case" milestone (cases start there at creation), and phase 6
+// outcomes (passport / refused / more info) are decisions that should be
+// chosen explicitly via the timeline's record-event dialog.
+const PHASE_DROP_MILESTONE: Partial<Record<number, Milestone>> = {
+  2: "documents_in_progress",
+  3: "review_started",
   4: "submitted_to_ircc",
   5: "biometrics_pending",
 };
@@ -155,13 +169,14 @@ export function CasesBoardView({ cases }: { cases: BoardCase[] }) {
     const sourcePhase = findPhaseOf(caseId);
     if (sourcePhase === null || sourcePhase === targetPhase) return;
 
-    const targetStatus = PHASE_DROP_TARGET[targetPhase];
-    if (!targetStatus) {
+    const milestone = PHASE_DROP_MILESTONE[targetPhase];
+    if (!milestone) {
       setError(
-        "Phase 6 outcomes (passport / refused / more info) need an explicit choice — open the case to mark a decision.",
+        "Phase 6 outcomes (passport / refused / more info) need an explicit choice — open the case to record a decision event.",
       );
       return;
     }
+    const targetStatus = MILESTONE_STATUS[milestone];
 
     // Optimistic move
     const previous = items;
@@ -174,7 +189,7 @@ export function CasesBoardView({ cases }: { cases: BoardCase[] }) {
     });
 
     startTransition(async () => {
-      const result = await advancePhase({ caseId, targetStatus });
+      const result = await recordEvent({ caseId, milestone });
       if ("error" in result) {
         setError(result.error);
         setItems(previous); // rollback
@@ -213,7 +228,7 @@ export function CasesBoardView({ cases }: { cases: BoardCase[] }) {
               key={phase}
               phase={phase}
               cases={items[phase]}
-              droppable={Boolean(PHASE_DROP_TARGET[phase])}
+              droppable={Boolean(PHASE_DROP_MILESTONE[phase])}
             />
           ))}
         </div>
@@ -333,7 +348,15 @@ function CaseCard({
           "rotate-1 cursor-grabbing border-[var(--navy)]/40 shadow-2xl ring-2 ring-[var(--navy)]/20",
       )}
     >
-      <div className="font-mono text-[10px] uppercase tracking-wider text-stone-400">
+      <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-stone-400">
+        <span
+          aria-label={WAITING_LABEL[WAITING_ON[caseRow.status]]}
+          title={WAITING_LABEL[WAITING_ON[caseRow.status]]}
+          className={cn(
+            "h-1.5 w-1.5 shrink-0 rounded-full",
+            WAITING_DOT[WAITING_ON[caseRow.status]],
+          )}
+        />
         {caseRow.caseNumber}
       </div>
       <div className="mt-1">

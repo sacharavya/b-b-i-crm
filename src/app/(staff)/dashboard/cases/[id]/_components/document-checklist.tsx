@@ -3,10 +3,12 @@ import { DocumentRow } from "./document-row";
 export type TemplateDoc = {
   document_code: string;
   document_label: string;
-  category: string;
+  group_code: string;
   is_required: boolean;
   condition_label: string | null;
   display_order: number;
+  instructions: string | null;
+  group: { name: string; display_order: number } | null;
 };
 
 export type LatestDoc = {
@@ -15,6 +17,37 @@ export type LatestDoc = {
   sharepoint_web_url: string | null;
   version_number: number;
 };
+
+type Group = {
+  code: string;
+  name: string;
+  displayOrder: number;
+  docs: TemplateDoc[];
+};
+
+function groupDocs(docs: TemplateDoc[]): Group[] {
+  const byCode = new Map<string, Group>();
+  for (const d of docs) {
+    const key = d.group_code;
+    let g = byCode.get(key);
+    if (!g) {
+      g = {
+        code: key,
+        name: d.group?.name ?? key,
+        displayOrder: d.group?.display_order ?? 1000,
+        docs: [],
+      };
+      byCode.set(key, g);
+    }
+    g.docs.push(d);
+  }
+  return Array.from(byCode.values())
+    .map((g) => ({
+      ...g,
+      docs: [...g.docs].sort((a, b) => a.display_order - b.display_order),
+    }))
+    .sort((a, b) => a.displayOrder - b.displayOrder);
+}
 
 export function DocumentChecklist({
   caseId,
@@ -34,6 +67,8 @@ export function DocumentChecklist({
     isReceived(d.document_code),
   ).length;
 
+  const groups = groupDocs(templateDocs);
+
   return (
     <div className="rounded-xl border border-stone-200 bg-white p-6">
       <div className="mb-4 flex items-baseline justify-between">
@@ -47,20 +82,30 @@ export function DocumentChecklist({
           No documents in this service template.
         </p>
       ) : (
-        <ul className="divide-y divide-stone-100">
-          {templateDocs.map((d) => (
-            <DocumentRow
-              key={d.document_code}
-              caseId={caseId}
-              templateDoc={{
-                document_code: d.document_code,
-                document_label: d.document_label,
-                condition_label: d.condition_label,
-              }}
-              uploaded={latestByCode.get(d.document_code) ?? null}
-            />
+        <div className="space-y-5">
+          {groups.map((g) => (
+            <section key={g.code}>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-stone-500">
+                {g.name}
+              </h3>
+              <ul className="divide-y divide-stone-100">
+                {g.docs.map((d) => (
+                  <DocumentRow
+                    key={d.document_code}
+                    caseId={caseId}
+                    templateDoc={{
+                      document_code: d.document_code,
+                      document_label: d.document_label,
+                      condition_label: d.condition_label,
+                      instructions: d.instructions,
+                    }}
+                    uploaded={latestByCode.get(d.document_code) ?? null}
+                  />
+                ))}
+              </ul>
+            </section>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );

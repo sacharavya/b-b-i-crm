@@ -4,6 +4,7 @@ import {
   BarChart3,
   Briefcase,
   CheckSquare,
+  ListChecks,
   LogOut,
   Shield,
   Users,
@@ -72,6 +73,14 @@ export function StaffSidebar() {
             active={isActive(href)}
           />
         ))}
+        <Can permission="manage_templates">
+          <NavItem
+            href="/dashboard/checklists"
+            label="Checklists"
+            Icon={ListChecks}
+            active={isActive("/dashboard/checklists")}
+          />
+        </Can>
         <Can permission="manage_staff">
           <NavItem
             href="/dashboard/staff"

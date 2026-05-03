@@ -15,135 +15,18 @@ import {
   MAX_UPLOAD_BYTES,
   formatBytesMb,
 } from "@/lib/validators/document";
+import {
+  MILESTONE_LABEL,
+  MILESTONE_STATUS,
+  nextMilestones,
+  type CaseStatus,
+  type Milestone,
+} from "@/lib/utils/phase";
 import { paymentSchema } from "@/lib/validators/payment";
 
+const MILESTONE_VALUES = Object.keys(MILESTONE_STATUS) as [Milestone, ...Milestone[]];
+
 type CaseUpdate = Database["crm"]["Tables"]["cases"]["Update"];
-
-const CASE_STATUSES = [
-  "retainer_signed",
-  "documentation_in_progress",
-  "documentation_review",
-  "submitted_to_ircc",
-  "biometrics_pending",
-  "biometrics_completed",
-  "awaiting_decision",
-  "passport_requested",
-  "refused",
-  "additional_info_requested",
-  "closed",
-] as const;
-
-const advanceSchema = z.object({
-  caseId: z.string().uuid(),
-  targetStatus: z.enum(CASE_STATUSES),
-});
-
-export type AdvanceInput = z.infer<typeof advanceSchema>;
-export type AdvanceResult = { ok: true } | { error: string };
-
-/**
- * Advance a case to a new phase. Calls crm.can_advance_phase() to enforce
- * the firm's payment gates; on a blocked transition the function returns
- * { error: <reason> } so the UI can swap to its gate-block view rather
- * than throw.
- */
-export async function advancePhase(
-  input: AdvanceInput,
-): Promise<AdvanceResult> {
-  const parsed = advanceSchema.safeParse(input);
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
-  }
-  const { caseId, targetStatus } = parsed.data;
-
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
-
-  const { data: staff } = await supabase
-    .schema("crm")
-    .from("staff")
-    .select("id")
-    .eq("auth_user_id", user.id)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (!staff) return { error: "Active staff record not found" };
-
-  // Current status — needed for the case_event payload and to short-circuit
-  // no-op transitions.
-  const { data: caseRow, error: caseErr } = await supabase
-    .schema("crm")
-    .from("cases")
-    .select("status")
-    .eq("id", caseId)
-    .is("deleted_at", null)
-    .maybeSingle();
-
-  if (caseErr || !caseRow) {
-    return { error: caseErr?.message ?? "Case not found" };
-  }
-
-  if (caseRow.status === targetStatus) {
-    return { ok: true };
-  }
-
-  // Gate check via the SQL function. Returns a one-row table {allowed,reason}.
-  const { data: gateRows, error: gateErr } = await supabase
-    .schema("crm")
-    .rpc("can_advance_phase", {
-      p_case_id: caseId,
-      p_target_status: targetStatus,
-    });
-
-  if (gateErr) return { error: gateErr.message };
-
-  const gate = Array.isArray(gateRows) ? gateRows[0] : gateRows;
-  if (!gate?.allowed) {
-    return { error: gate?.reason ?? "Phase advancement blocked" };
-  }
-
-  // Build update payload, stamping the relevant lifecycle timestamp.
-  const now = new Date().toISOString();
-  const updates: CaseUpdate = { status: targetStatus };
-  switch (targetStatus) {
-    case "submitted_to_ircc":
-      updates.submitted_at = now;
-      break;
-    case "passport_requested":
-    case "refused":
-    case "additional_info_requested":
-      updates.decided_at = now;
-      break;
-    case "closed":
-      updates.closed_at = now;
-      break;
-  }
-
-  const { error: updateErr } = await supabase
-    .schema("crm")
-    .from("cases")
-    .update(updates)
-    .eq("id", caseId);
-
-  if (updateErr) return { error: updateErr.message };
-
-  await supabase
-    .schema("crm")
-    .from("case_events")
-    .insert({
-      case_id: caseId,
-      event_type: "status_changed",
-      event_data: { from: caseRow.status, to: targetStatus },
-      description: `Status changed from ${caseRow.status} to ${targetStatus}`,
-      created_by: staff.id,
-    });
-
-  revalidatePath(`/dashboard/cases/${caseId}`);
-  return { ok: true };
-}
 
 function sanitizeFileName(name: string): string {
   return name
@@ -171,14 +54,12 @@ export async function uploadDocument(
   const file = formData.get("file");
   if (!(file instanceof File)) return { error: "No file provided" };
 
+  // Hard ceiling regardless of template overrides — Graph's small-file
+  // upload endpoint caps at 4 MB. Bigger files would need the upload-session
+  // flow, which we don't implement.
   if (file.size > MAX_UPLOAD_BYTES) {
     return {
       error: `File exceeds the 4MB limit (${formatBytesMb(file.size)} MB).`,
-    };
-  }
-  if (!ALLOWED_MIME_TYPES_SET.has(file.type)) {
-    return {
-      error: `File type ${file.type || "unknown"} is not allowed. Use ${ALLOWED_EXTENSIONS_HUMAN}.`,
     };
   }
 
@@ -217,23 +98,57 @@ export async function uploadDocument(
   const { data: templateDoc } = await supabase
     .schema("ref")
     .from("template_documents")
-    .select("category, document_label")
+    .select(
+      `
+        document_label,
+        allowed_file_types,
+        max_file_size_mb,
+        group:checklist_groups(name)
+      `,
+    )
     .eq("service_template_id", caseRow.service_template_id)
     .eq("document_code", documentCode)
     .maybeSingle();
   if (!templateDoc) {
     return { error: "Document code is not part of this case's template." };
   }
-
-  const { data: category } = await supabase
-    .schema("ref")
-    .from("document_categories")
-    .select("name")
-    .eq("code", templateDoc.category)
-    .maybeSingle();
-  if (!category) {
-    return { error: "Document category not found in reference data." };
+  if (!templateDoc.group) {
+    return {
+      error: "Document group missing — checklist group reference is broken.",
+    };
   }
+
+  // Per-template override of the global mime allow-list. Falls back to the
+  // default set when the template doesn't pin one.
+  const allowed = templateDoc.allowed_file_types?.length
+    ? new Set(templateDoc.allowed_file_types)
+    : ALLOWED_MIME_TYPES_SET;
+  if (!allowed.has(file.type)) {
+    const human = templateDoc.allowed_file_types?.length
+      ? templateDoc.allowed_file_types.join(", ")
+      : ALLOWED_EXTENSIONS_HUMAN;
+    return {
+      error: `File type ${file.type || "unknown"} is not allowed for this document. Use ${human}.`,
+    };
+  }
+
+  // Per-template size cap, clamped to the Graph small-upload ceiling.
+  // Templates above the ceiling are an authoring mistake — log + clamp.
+  if (templateDoc.max_file_size_mb !== null) {
+    if (templateDoc.max_file_size_mb > 4) {
+      console.warn(
+        `template_document.max_file_size_mb=${templateDoc.max_file_size_mb} exceeds the 4MB Graph small-upload ceiling — clamping.`,
+      );
+    }
+    const cap = Math.min(templateDoc.max_file_size_mb, 4) * 1024 * 1024;
+    if (file.size > cap) {
+      return {
+        error: `File exceeds this document's ${Math.min(templateDoc.max_file_size_mb, 4)}MB limit (${formatBytesMb(file.size)} MB).`,
+      };
+    }
+  }
+
+  const category = { name: templateDoc.group.name };
 
   const driveId = process.env.GRAPH_DOCUMENT_LIBRARY_ID;
   if (!driveId) return { error: "GRAPH_DOCUMENT_LIBRARY_ID is not set" };
@@ -327,7 +242,9 @@ export async function uploadDocument(
       client_id: caseRow.client_id,
       document_code: documentCode,
       display_name: templateDoc.document_label,
-      category: templateDoc.category,
+      // files.documents.category is a denormalised label kept for legacy
+      // queries; populate it with the checklist group name.
+      category: category.name,
       sharepoint_drive_id: driveId,
       sharepoint_item_id: uploadResponse.id,
       sharepoint_web_url: uploadResponse.webUrl,
@@ -542,5 +459,185 @@ export async function updateAssignment(
     });
 
   revalidatePath(`/dashboard/cases/${caseId}`);
+  return { ok: true };
+}
+
+// ============================================================================
+// recordEvent — event-driven phase advancement
+// ============================================================================
+//
+// Staff record a real-world milestone ("Submitted to IRCC", "Biometrics
+// done", "IRCC decision: passport requested"). The status is derived from
+// the milestone via MILESTONE_STATUS (defined in src/lib/utils/phase.ts).
+// crm.can_advance_phase() still enforces the payment gate, and the
+// matching lifecycle timestamp (submitted_at / decided_at / closed_at) is
+// stamped on cases. The case_events row carries occurred_at (the date the
+// user picked, not the moment-of-edit) plus event_data.milestone.
+
+const recordEventSchema = z.object({
+  caseId: z.string().uuid(),
+  milestone: z.enum(MILESTONE_VALUES),
+  // ISO 8601 instant or null. Defaults to "now" server-side.
+  occurredAt: z
+    .string()
+    .datetime({ offset: true })
+    .optional()
+    .nullable(),
+  note: z.string().trim().max(500).optional().nullable(),
+});
+
+export type RecordEventInput = z.infer<typeof recordEventSchema>;
+export type RecordEventResult =
+  | { ok: true }
+  | { error: string; gateBlocked?: boolean };
+
+export async function recordEvent(
+  input: RecordEventInput,
+): Promise<RecordEventResult> {
+  const parsed = recordEventSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input" };
+  }
+  const { caseId, milestone, occurredAt, note } = parsed.data;
+  const targetStatus: CaseStatus = MILESTONE_STATUS[milestone];
+
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const { data: staff } = await supabase
+    .schema("crm")
+    .from("staff")
+    .select("id")
+    .eq("auth_user_id", user.id)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!staff) return { error: "Active staff record not found" };
+
+  const { data: caseRow, error: caseErr } = await supabase
+    .schema("crm")
+    .from("cases")
+    .select("status")
+    .eq("id", caseId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (caseErr || !caseRow) {
+    return { error: caseErr?.message ?? "Case not found" };
+  }
+
+  // Defence in depth — UI only offers nextMilestones(currentStatus); reject
+  // any milestone that doesn't fit the current state.
+  const allowed = nextMilestones(caseRow.status);
+  if (!allowed.includes(milestone)) {
+    return {
+      error: `'${MILESTONE_LABEL[milestone]}' is not a valid next step from the current status.`,
+    };
+  }
+
+  // Payment gate (crm.can_advance_phase). Returns one row {allowed, reason}.
+  const { data: gateRows, error: gateErr } = await supabase
+    .schema("crm")
+    .rpc("can_advance_phase", {
+      p_case_id: caseId,
+      p_target_status: targetStatus,
+    });
+  if (gateErr) return { error: gateErr.message };
+  const gate = Array.isArray(gateRows) ? gateRows[0] : gateRows;
+  if (!gate?.allowed) {
+    return {
+      error: gate?.reason ?? "Phase advancement blocked",
+      gateBlocked: true,
+    };
+  }
+
+  const occurred = occurredAt ?? new Date().toISOString();
+  const updates: CaseUpdate = { status: targetStatus };
+  switch (targetStatus) {
+    case "submitted_to_ircc":
+      updates.submitted_at = occurred;
+      break;
+    case "passport_requested":
+    case "refused":
+    case "additional_info_requested":
+      updates.decided_at = occurred;
+      break;
+    case "closed":
+      updates.closed_at = occurred;
+      break;
+  }
+
+  if (caseRow.status !== targetStatus) {
+    const { error: updateErr } = await supabase
+      .schema("crm")
+      .from("cases")
+      .update(updates)
+      .eq("id", caseId);
+    if (updateErr) return { error: updateErr.message };
+  }
+
+  const description = note?.trim()
+    ? `${MILESTONE_LABEL[milestone]} — ${note.trim()}`
+    : MILESTONE_LABEL[milestone];
+
+  await supabase
+    .schema("crm")
+    .from("case_events")
+    .insert({
+      case_id: caseId,
+      event_type: "status_changed",
+      event_data: {
+        milestone,
+        from: caseRow.status,
+        to: targetStatus,
+      },
+      description,
+      occurred_at: occurred,
+      created_by: staff.id,
+    });
+
+  revalidatePath(`/dashboard/cases/${caseId}`);
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// deleteCase (PERM-1)
+//
+// Hard delete a case. super_user only — gated here and by the
+// crm.cases delete RLS policy from migration 20260501000005, now tightened
+// by the rewritten staff_can() in 20260502000007.
+//
+// FK cascades clean up case_events, case_participants, and case-scoped
+// rows that have ON DELETE CASCADE. files.documents has its own deletion
+// rules and is not touched here. The audit trigger captures the row state
+// on delete for compliance.
+// ---------------------------------------------------------------------------
+
+export async function deleteCase(
+  caseId: string,
+): Promise<{ ok: true } | { error: string }> {
+  if (!z.string().uuid().safeParse(caseId).success) {
+    return { error: "Invalid case id" };
+  }
+
+  const me = await getStaff();
+  if (!me) return { error: "Not authenticated" };
+  if (!staffCan(me, "delete_cases")) {
+    return { error: "Only a super user can permanently delete a case." };
+  }
+
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .schema("crm")
+    .from("cases")
+    .delete()
+    .eq("id", caseId);
+  if (error) return { error: error.message };
+
+  revalidatePath("/dashboard/cases");
+  revalidatePath("/dashboard");
   return { ok: true };
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { Input } from "@/components/ui/input";
@@ -25,6 +26,7 @@ export type ClientRow = {
 };
 
 export function ClientsTable({ rows }: { rows: ClientRow[] }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
@@ -98,34 +100,50 @@ export function ClientsTable({ rows }: { rows: ClientRow[] }) {
                 </TableCell>
               </TableRow>
             ) : (
-              filtered.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell className="font-mono text-sm text-stone-700">
-                    {r.clientNumber}
-                  </TableCell>
-                  <TableCell className="font-medium">{r.legalName}</TableCell>
-                  <TableCell className="text-stone-700">
-                    {r.email ?? "—"}
-                  </TableCell>
-                  <TableCell className="text-stone-700">
-                    {r.phone ?? "—"}
-                  </TableCell>
-                  <TableCell className="text-stone-700">
-                    {r.citizenship ?? "—"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <span className="inline-flex items-center gap-1 text-sm text-stone-700">
-                      <span className="font-semibold tabular-nums text-stone-900">
-                        {r.openCases}
+              filtered.map((r) => {
+                const open = () => router.push(`/dashboard/clients/${r.id}`);
+                return (
+                  <TableRow
+                    key={r.id}
+                    onClick={open}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        open();
+                      }
+                    }}
+                    tabIndex={0}
+                    role="link"
+                    aria-label={`Open client ${r.clientNumber}`}
+                    className="cursor-pointer transition-colors hover:bg-stone-50 focus:bg-stone-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--gold)]"
+                  >
+                    <TableCell className="font-mono text-sm text-stone-700">
+                      {r.clientNumber}
+                    </TableCell>
+                    <TableCell className="font-medium">{r.legalName}</TableCell>
+                    <TableCell className="text-stone-700">
+                      {r.email ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-stone-700">
+                      {r.phone ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-stone-700">
+                      {r.citizenship ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className="inline-flex items-center gap-1 text-sm text-stone-700">
+                        <span className="font-semibold tabular-nums text-stone-900">
+                          {r.openCases}
+                        </span>
+                        <span className="text-stone-400">/</span>
+                        <span className="tabular-nums text-stone-500">
+                          {r.totalCases}
+                        </span>
                       </span>
-                      <span className="text-stone-400">/</span>
-                      <span className="tabular-nums text-stone-500">
-                        {r.totalCases}
-                      </span>
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ))
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>

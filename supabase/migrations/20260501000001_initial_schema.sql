@@ -22,7 +22,10 @@
 --   - RLS enforced, deny-by-default
 -- ============================================================================
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- gen_random_uuid() is built into Postgres 13+ via pgcrypto, which
+-- Supabase enables by default. Avoiding the uuid-ossp dependency means
+-- the migration works on both local and hosted Supabase, where uuid-ossp
+-- lives in the `extensions` schema and isn't in the default search_path.
 CREATE EXTENSION IF NOT EXISTS "citext";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
@@ -54,7 +57,7 @@ CREATE TYPE crm.service_category AS ENUM (
 );
 
 CREATE TABLE ref.service_types (
-    id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     code                  TEXT NOT NULL UNIQUE,
     name                  TEXT NOT NULL,
     category              crm.service_category NOT NULL,
@@ -68,7 +71,7 @@ CREATE TABLE ref.service_types (
 -- Service templates: versioned. Existing cases reference the version they
 -- were created with; new versions do not retroactively affect open cases.
 CREATE TABLE ref.service_templates (
-    id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     service_type_id   UUID NOT NULL REFERENCES ref.service_types(id),
     version           INT NOT NULL,
     effective_from    DATE NOT NULL,
@@ -86,7 +89,7 @@ CREATE TABLE ref.service_templates (
 -- Conditions are simple text labels matched in the UI (e.g., "if married",
 -- "if businessperson", "if sponsor in Canada"). Logic is handled in app code.
 CREATE TABLE ref.template_documents (
-    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     service_template_id UUID NOT NULL REFERENCES ref.service_templates(id) ON DELETE CASCADE,
     document_code       TEXT NOT NULL,
     document_label      TEXT NOT NULL,
@@ -118,7 +121,7 @@ CREATE TYPE crm.staff_role AS ENUM (
 );
 
 CREATE TABLE crm.staff (
-    id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     auth_user_id     UUID UNIQUE NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
     first_name       TEXT NOT NULL,
     last_name        TEXT NOT NULL,
@@ -153,7 +156,7 @@ CREATE TYPE crm.client_status AS ENUM (
 );
 
 CREATE TABLE crm.clients (
-    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_number       TEXT UNIQUE NOT NULL,
     -- Names
     legal_name_full     TEXT NOT NULL,
@@ -227,7 +230,7 @@ CREATE TYPE crm.relationship_type AS ENUM (
 -- Family members (parents, spouse, children, siblings). Mirrors the
 -- FAMILY INFORMATION form provided by Big Bang.
 CREATE TABLE crm.client_family_members (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_id       UUID NOT NULL REFERENCES crm.clients(id) ON DELETE CASCADE,
     relationship    crm.relationship_type NOT NULL,
     full_name       TEXT NOT NULL,
@@ -253,7 +256,7 @@ CREATE INDEX idx_family_members_client ON crm.client_family_members(client_id);
 
 -- Education history (institutions). Years summary lives on clients.
 CREATE TABLE crm.client_education_history (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_id       UUID NOT NULL REFERENCES crm.clients(id) ON DELETE CASCADE,
     date_from       DATE,
     date_to         DATE,
@@ -274,7 +277,7 @@ CREATE INDEX idx_education_client ON crm.client_education_history(client_id);
 -- periods, unemployment, travel, detention; the firm captures all of it for
 -- IRCC's Schedule A.
 CREATE TABLE crm.client_employment_history (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_id       UUID NOT NULL REFERENCES crm.clients(id) ON DELETE CASCADE,
     date_from       DATE,
     date_to         DATE,
@@ -295,7 +298,7 @@ CREATE INDEX idx_employment_client ON crm.client_employment_history(client_id);
 
 -- Travel history. Firm uses a separate Travel History form.
 CREATE TABLE crm.client_travel_history (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_id       UUID NOT NULL REFERENCES crm.clients(id) ON DELETE CASCADE,
     date_from       DATE NOT NULL,
     date_to         DATE NOT NULL,
@@ -313,7 +316,7 @@ CREATE INDEX idx_travel_client ON crm.client_travel_history(client_id);
 
 -- Address history (10 years or since age 18, whichever more recent).
 CREATE TABLE crm.client_address_history (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     client_id       UUID NOT NULL REFERENCES crm.clients(id) ON DELETE CASCADE,
     date_from       DATE,
     date_to         DATE,
@@ -368,7 +371,7 @@ $$ LANGUAGE SQL IMMUTABLE;
 
 
 CREATE TABLE crm.cases (
-    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     case_number         TEXT UNIQUE NOT NULL,
     client_id           UUID NOT NULL REFERENCES crm.clients(id),
     service_template_id UUID NOT NULL REFERENCES ref.service_templates(id),
@@ -424,7 +427,7 @@ CREATE TYPE crm.participant_role AS ENUM (
 );
 
 CREATE TABLE crm.case_participants (
-    id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     case_id    UUID NOT NULL REFERENCES crm.cases(id) ON DELETE CASCADE,
     client_id  UUID NOT NULL REFERENCES crm.clients(id),
     role       crm.participant_role NOT NULL,
@@ -448,7 +451,7 @@ CREATE TYPE crm.event_type AS ENUM (
 );
 
 CREATE TABLE crm.case_events (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     case_id         UUID NOT NULL REFERENCES crm.cases(id),
     event_type      crm.event_type NOT NULL,
     event_data      JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -478,7 +481,7 @@ CREATE TYPE crm.task_type AS ENUM (
 CREATE TYPE crm.task_status AS ENUM ('open', 'in_progress', 'blocked', 'done', 'cancelled');
 
 CREATE TABLE crm.tasks (
-    id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     case_id           UUID REFERENCES crm.cases(id) ON DELETE CASCADE,
     client_id         UUID REFERENCES crm.clients(id),
     task_type         crm.task_type NOT NULL,
@@ -514,7 +517,7 @@ CREATE TYPE files.document_status AS ENUM (
 );
 
 CREATE TABLE files.documents (
-    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     case_id             UUID REFERENCES crm.cases(id) ON DELETE CASCADE,
     client_id           UUID REFERENCES crm.clients(id),
     -- Matches ref.template_documents.document_code when applicable
@@ -565,7 +568,7 @@ CREATE TYPE crm.communication_channel AS ENUM (
 CREATE TYPE crm.communication_direction AS ENUM ('inbound', 'outbound');
 
 CREATE TABLE crm.communications (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     case_id         UUID REFERENCES crm.cases(id),
     client_id       UUID REFERENCES crm.clients(id),
     channel         crm.communication_channel NOT NULL,
@@ -603,7 +606,7 @@ CREATE INDEX idx_comms_channel   ON crm.communications(channel) WHERE deleted_at
 CREATE TYPE crm.invoice_status AS ENUM ('draft', 'sent', 'partial', 'paid', 'void', 'overdue');
 
 CREATE TABLE crm.invoices (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     invoice_number  TEXT UNIQUE NOT NULL,
     case_id         UUID REFERENCES crm.cases(id),
     client_id       UUID NOT NULL REFERENCES crm.clients(id),
@@ -622,7 +625,7 @@ CREATE TABLE crm.invoices (
 );
 
 CREATE TABLE crm.invoice_line_items (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     invoice_id      UUID NOT NULL REFERENCES crm.invoices(id) ON DELETE CASCADE,
     description     TEXT NOT NULL,
     quantity        NUMERIC(10,2) NOT NULL DEFAULT 1,
@@ -636,7 +639,7 @@ CREATE TYPE crm.payment_method AS ENUM (
 );
 
 CREATE TABLE crm.payments (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     invoice_id      UUID REFERENCES crm.invoices(id),
     case_id         UUID REFERENCES crm.cases(id),
     client_id       UUID NOT NULL REFERENCES crm.clients(id),

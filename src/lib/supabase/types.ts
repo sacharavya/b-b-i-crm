@@ -7,6 +7,11 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
   audit: {
     Tables: {
       change_log: {
@@ -77,6 +82,7 @@ export type Database = {
           event_data: Json
           event_type: Database["crm"]["Enums"]["event_type"]
           id: string
+          occurred_at: string
           visible_to_client: boolean
         }
         Insert: {
@@ -88,6 +94,7 @@ export type Database = {
           event_data?: Json
           event_type: Database["crm"]["Enums"]["event_type"]
           id?: string
+          occurred_at?: string
           visible_to_client?: boolean
         }
         Update: {
@@ -99,6 +106,7 @@ export type Database = {
           event_data?: Json
           event_type?: Database["crm"]["Enums"]["event_type"]
           id?: string
+          occurred_at?: string
           visible_to_client?: boolean
         }
         Relationships: [
@@ -519,6 +527,192 @@ export type Database = {
           },
         ]
       }
+      client_government_positions: {
+        Row: {
+          city: string | null
+          client_id: string
+          country_code: string | null
+          created_at: string
+          date_from: string | null
+          date_to: string | null
+          department: string | null
+          display_order: number
+          id: string
+          is_ongoing: boolean
+          level_of_jurisdiction: string | null
+          notes: string | null
+          position_held: string | null
+          province_state: string | null
+          updated_at: string
+        }
+        Insert: {
+          city?: string | null
+          client_id: string
+          country_code?: string | null
+          created_at?: string
+          date_from?: string | null
+          date_to?: string | null
+          department?: string | null
+          display_order?: number
+          id?: string
+          is_ongoing?: boolean
+          level_of_jurisdiction?: string | null
+          notes?: string | null
+          position_held?: string | null
+          province_state?: string | null
+          updated_at?: string
+        }
+        Update: {
+          city?: string | null
+          client_id?: string
+          country_code?: string | null
+          created_at?: string
+          date_from?: string | null
+          date_to?: string | null
+          department?: string | null
+          display_order?: number
+          id?: string
+          is_ongoing?: boolean
+          level_of_jurisdiction?: string | null
+          notes?: string | null
+          position_held?: string | null
+          province_state?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_government_positions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_military_services: {
+        Row: {
+          active_combat_details: string | null
+          branch_name: string | null
+          client_id: string
+          commanding_officer: string | null
+          country_code: string | null
+          created_at: string
+          date_from: string | null
+          date_to: string | null
+          display_order: number
+          id: string
+          is_ongoing: boolean
+          military_rank: string | null
+          notes: string | null
+          reason_for_end_of_service: string | null
+          updated_at: string
+        }
+        Insert: {
+          active_combat_details?: string | null
+          branch_name?: string | null
+          client_id: string
+          commanding_officer?: string | null
+          country_code?: string | null
+          created_at?: string
+          date_from?: string | null
+          date_to?: string | null
+          display_order?: number
+          id?: string
+          is_ongoing?: boolean
+          military_rank?: string | null
+          notes?: string | null
+          reason_for_end_of_service?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active_combat_details?: string | null
+          branch_name?: string | null
+          client_id?: string
+          commanding_officer?: string | null
+          country_code?: string | null
+          created_at?: string
+          date_from?: string | null
+          date_to?: string | null
+          display_order?: number
+          id?: string
+          is_ongoing?: boolean
+          military_rank?: string | null
+          notes?: string | null
+          reason_for_end_of_service?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_military_services_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_organisations: {
+        Row: {
+          city: string | null
+          client_id: string
+          country_code: string | null
+          created_at: string
+          date_from: string | null
+          date_to: string | null
+          display_order: number
+          id: string
+          is_ongoing: boolean
+          notes: string | null
+          organisation_name: string
+          organisation_type: string | null
+          position_held: string | null
+          province_state: string | null
+          updated_at: string
+        }
+        Insert: {
+          city?: string | null
+          client_id: string
+          country_code?: string | null
+          created_at?: string
+          date_from?: string | null
+          date_to?: string | null
+          display_order?: number
+          id?: string
+          is_ongoing?: boolean
+          notes?: string | null
+          organisation_name: string
+          organisation_type?: string | null
+          position_held?: string | null
+          province_state?: string | null
+          updated_at?: string
+        }
+        Update: {
+          city?: string | null
+          client_id?: string
+          country_code?: string | null
+          created_at?: string
+          date_from?: string | null
+          date_to?: string | null
+          display_order?: number
+          id?: string
+          is_ongoing?: boolean
+          notes?: string | null
+          organisation_name?: string
+          organisation_type?: string | null
+          position_held?: string | null
+          province_state?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_organisations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_travel_history: {
         Row: {
           city: string | null
@@ -590,10 +784,15 @@ export type Database = {
           family_name: string | null
           gender: Database["crm"]["Enums"]["gender"] | null
           given_names: string | null
+          government_position_held: boolean | null
+          has_children: boolean | null
+          has_siblings: boolean | null
           id: string
           legal_name_full: string
           marital_status: Database["crm"]["Enums"]["marital_status"] | null
+          military_service_held: boolean | null
           notes: string | null
+          organisations_member: boolean | null
           phone_primary: string | null
           phone_whatsapp: string | null
           postal_code: string | null
@@ -605,6 +804,7 @@ export type Database = {
           referred_by: string | null
           source: string | null
           status: Database["crm"]["Enums"]["client_status"]
+          travel_completed: boolean | null
           updated_at: string
           years_elementary: number | null
           years_post_secondary: number | null
@@ -631,10 +831,15 @@ export type Database = {
           family_name?: string | null
           gender?: Database["crm"]["Enums"]["gender"] | null
           given_names?: string | null
+          government_position_held?: boolean | null
+          has_children?: boolean | null
+          has_siblings?: boolean | null
           id?: string
           legal_name_full: string
           marital_status?: Database["crm"]["Enums"]["marital_status"] | null
+          military_service_held?: boolean | null
           notes?: string | null
+          organisations_member?: boolean | null
           phone_primary?: string | null
           phone_whatsapp?: string | null
           postal_code?: string | null
@@ -646,6 +851,7 @@ export type Database = {
           referred_by?: string | null
           source?: string | null
           status?: Database["crm"]["Enums"]["client_status"]
+          travel_completed?: boolean | null
           updated_at?: string
           years_elementary?: number | null
           years_post_secondary?: number | null
@@ -672,10 +878,15 @@ export type Database = {
           family_name?: string | null
           gender?: Database["crm"]["Enums"]["gender"] | null
           given_names?: string | null
+          government_position_held?: boolean | null
+          has_children?: boolean | null
+          has_siblings?: boolean | null
           id?: string
           legal_name_full?: string
           marital_status?: Database["crm"]["Enums"]["marital_status"] | null
+          military_service_held?: boolean | null
           notes?: string | null
+          organisations_member?: boolean | null
           phone_primary?: string | null
           phone_whatsapp?: string | null
           postal_code?: string | null
@@ -687,6 +898,7 @@ export type Database = {
           referred_by?: string | null
           source?: string | null
           status?: Database["crm"]["Enums"]["client_status"]
+          travel_completed?: boolean | null
           updated_at?: string
           years_elementary?: number | null
           years_post_secondary?: number | null
@@ -1308,13 +1520,6 @@ export type Database = {
         | "step_sister"
         | "guardian"
         | "other"
-      service_category:
-        | "temporary_resident"
-        | "permanent_resident"
-        | "citizenship"
-        | "sponsorship"
-        | "appeal_or_review"
-        | "other"
       staff_role:
         | "admin"
         | "rcic"
@@ -1476,6 +1681,36 @@ export type Database = {
   }
   ref: {
     Tables: {
+      checklist_groups: {
+        Row: {
+          code: string
+          created_at: string
+          created_by: string | null
+          description: string | null
+          display_order: number
+          is_active: boolean
+          name: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          display_order?: number
+          is_active?: boolean
+          name: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          display_order?: number
+          is_active?: boolean
+          name?: string
+        }
+        Relationships: []
+      }
       countries: {
         Row: {
           code: string
@@ -1515,33 +1750,66 @@ export type Database = {
         }
         Relationships: []
       }
+      service_categories: {
+        Row: {
+          code: string
+          created_at: string
+          description: string | null
+          display_order: number
+          is_active: boolean
+          name: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          description?: string | null
+          display_order?: number
+          is_active?: boolean
+          name: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          description?: string | null
+          display_order?: number
+          is_active?: boolean
+          name?: string
+        }
+        Relationships: []
+      }
       service_templates: {
         Row: {
           created_at: string
+          created_by: string | null
           description: string | null
           effective_from: string
           effective_to: string | null
           id: string
+          notes: string | null
           required_intake_sections: Json
           service_type_id: string
           version: number
         }
         Insert: {
           created_at?: string
+          created_by?: string | null
           description?: string | null
           effective_from: string
           effective_to?: string | null
           id?: string
+          notes?: string | null
           required_intake_sections?: Json
           service_type_id: string
           version: number
         }
         Update: {
           created_at?: string
+          created_by?: string | null
           description?: string | null
           effective_from?: string
           effective_to?: string | null
           id?: string
+          notes?: string | null
           required_intake_sections?: Json
           service_type_id?: string
           version?: number
@@ -1558,75 +1826,117 @@ export type Database = {
       }
       service_types: {
         Row: {
-          category: Database["crm"]["Enums"]["service_category"]
+          category_code: string
           code: string
           created_at: string
+          created_by: string | null
+          deactivated_at: string | null
+          deactivated_by: string | null
+          deactivation_reason: string | null
           description: string | null
           display_order: number
           id: string
-          is_active: boolean
           name: string
+          scheduled_deactivation_at: string | null
+          sub_category: string | null
           typical_duration_days: number | null
         }
         Insert: {
-          category: Database["crm"]["Enums"]["service_category"]
+          category_code: string
           code: string
           created_at?: string
+          created_by?: string | null
+          deactivated_at?: string | null
+          deactivated_by?: string | null
+          deactivation_reason?: string | null
           description?: string | null
           display_order?: number
           id?: string
-          is_active?: boolean
           name: string
+          scheduled_deactivation_at?: string | null
+          sub_category?: string | null
           typical_duration_days?: number | null
         }
         Update: {
-          category?: Database["crm"]["Enums"]["service_category"]
+          category_code?: string
           code?: string
           created_at?: string
+          created_by?: string | null
+          deactivated_at?: string | null
+          deactivated_by?: string | null
+          deactivation_reason?: string | null
           description?: string | null
           display_order?: number
           id?: string
-          is_active?: boolean
           name?: string
+          scheduled_deactivation_at?: string | null
+          sub_category?: string | null
           typical_duration_days?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "service_types_category_code_fkey"
+            columns: ["category_code"]
+            isOneToOne: false
+            referencedRelation: "service_categories"
+            referencedColumns: ["code"]
+          },
+        ]
       }
       template_documents: {
         Row: {
-          category: string
+          allowed_file_types: string[] | null
           condition_label: string | null
           display_order: number
           document_code: string
           document_label: string
+          expected_quantity: number
+          group_code: string
           id: string
+          instructions: string | null
           is_required: boolean
+          max_file_size_mb: number | null
           notes: string | null
           service_template_id: string
         }
         Insert: {
-          category: string
+          allowed_file_types?: string[] | null
           condition_label?: string | null
           display_order?: number
           document_code: string
           document_label: string
+          expected_quantity?: number
+          group_code: string
           id?: string
+          instructions?: string | null
           is_required?: boolean
+          max_file_size_mb?: number | null
           notes?: string | null
           service_template_id: string
         }
         Update: {
-          category?: string
+          allowed_file_types?: string[] | null
           condition_label?: string | null
           display_order?: number
           document_code?: string
           document_label?: string
+          expected_quantity?: number
+          group_code?: string
           id?: string
+          instructions?: string | null
           is_required?: boolean
+          max_file_size_mb?: number | null
           notes?: string | null
           service_template_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "template_documents_group_code_fkey"
+            columns: ["group_code"]
+            isOneToOne: false
+            referencedRelation: "checklist_groups"
+            referencedColumns: ["code"]
+          },
           {
             foreignKeyName: "template_documents_service_template_id_fkey"
             columns: ["service_template_id"]
@@ -1641,7 +1951,11 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      active_template_for_variant: {
+        Args: { p_service_type_id: string }
+        Returns: string
+      }
+      is_variant_active: { Args: { p_id: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
@@ -1870,14 +2184,6 @@ export const Constants = {
         "guardian",
         "other",
       ],
-      service_category: [
-        "temporary_resident",
-        "permanent_resident",
-        "citizenship",
-        "sponsorship",
-        "appeal_or_review",
-        "other",
-      ],
       staff_role: [
         "admin",
         "rcic",
@@ -1924,4 +2230,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-

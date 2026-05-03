@@ -33,6 +33,7 @@ export type DocumentRowProps = {
     document_code: string;
     document_label: string;
     condition_label: string | null;
+    instructions: string | null;
   };
   uploaded: {
     status: string;
@@ -133,6 +134,11 @@ export function DocumentRow({ caseId, templateDoc, uploaded }: DocumentRowProps)
         {templateDoc.condition_label && (
           <div className="mt-0.5 text-xs text-stone-500">
             {templateDoc.condition_label}
+          </div>
+        )}
+        {templateDoc.instructions && (
+          <div className="mt-0.5 text-xs text-stone-500">
+            {templateDoc.instructions}
           </div>
         )}
         {error && (

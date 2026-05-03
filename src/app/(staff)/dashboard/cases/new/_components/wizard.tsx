@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Can } from "@/components/auth/can";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -31,11 +33,20 @@ import {
   type ClientSearchResult,
 } from "../actions";
 
-type ServiceOption = {
+export type CategoryOption = {
+  code: string;
+  name: string;
+  description: string | null;
+  variantCount: number;
+};
+
+export type VariantOption = {
   id: string;
   code: string;
   name: string;
-  hasChecklist: boolean;
+  description: string | null;
+  typicalDurationDays: number | null;
+  categoryCode: string;
 };
 
 type CountryOption = { code: string; name: string };
@@ -63,14 +74,23 @@ const emptyClient: NewClientInput = {
 };
 
 export function NewCaseWizard({
-  serviceOptions,
+  categories,
+  variants,
   countries,
+  canManageTemplates,
+  preselectedClient,
 }: {
-  serviceOptions: ServiceOption[];
+  categories: CategoryOption[];
+  variants: VariantOption[];
   countries: CountryOption[];
+  canManageTemplates: boolean;
+  preselectedClient?: ClientSearchResult | null;
 }) {
-  const [step, setStep] = useState<Step>(1);
-  const [client, setClient] = useState<ClientChoice | null>(null);
+  const [step, setStep] = useState<Step>(preselectedClient ? 2 : 1);
+  const [client, setClient] = useState<ClientChoice | null>(
+    preselectedClient ? { kind: "existing", client: preselectedClient } : null,
+  );
+  const [categoryCode, setCategoryCode] = useState<string>("");
   const [serviceTypeId, setServiceTypeId] = useState<string>("");
   const [quotedFee, setQuotedFee] = useState("");
   const [retainerMin, setRetainerMin] = useState("");
@@ -78,7 +98,7 @@ export function NewCaseWizard({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const selectedService = serviceOptions.find((s) => s.id === serviceTypeId);
+  const selectedService = variants.find((s) => s.id === serviceTypeId);
 
   function handleSubmit() {
     if (!client) {
@@ -141,9 +161,16 @@ export function NewCaseWizard({
         )}
         {step === 2 && (
           <ServiceStep
-            options={serviceOptions}
-            value={serviceTypeId}
-            onChange={setServiceTypeId}
+            categories={categories}
+            variants={variants}
+            categoryCode={categoryCode}
+            variantId={serviceTypeId}
+            onCategoryChange={(code) => {
+              setCategoryCode(code);
+              setServiceTypeId("");
+            }}
+            onVariantChange={setServiceTypeId}
+            canManageTemplates={canManageTemplates}
             onBack={() => setStep(1)}
             onNext={() => setStep(3)}
           />
@@ -476,43 +503,141 @@ function NewClientForm({
 /* ───────────────────────── Step 2: Service ───────────────────────── */
 
 function ServiceStep({
-  options,
-  value,
-  onChange,
+  categories,
+  variants,
+  categoryCode,
+  variantId,
+  onCategoryChange,
+  onVariantChange,
+  canManageTemplates,
   onBack,
   onNext,
 }: {
-  options: ServiceOption[];
-  value: string;
-  onChange: (id: string) => void;
+  categories: CategoryOption[];
+  variants: VariantOption[];
+  categoryCode: string;
+  variantId: string;
+  onCategoryChange: (code: string) => void;
+  onVariantChange: (id: string) => void;
+  canManageTemplates: boolean;
   onBack: () => void;
   onNext: () => void;
 }) {
-  const selected = options.find((o) => o.id === value);
+  // Empty state: there are no usable variants at all in any category.
+  if (categories.length === 0) {
+    return (
+      <div className="space-y-4 py-4 text-center">
+        <p className="text-sm text-stone-700">
+          No checklists have been created yet.
+        </p>
+        <p className="text-xs text-stone-500">
+          {canManageTemplates
+            ? "Variants drive what services you can open cases for."
+            : "Ask a super user, admin, or RCIC to create one."}
+        </p>
+        <Can permission="manage_templates">
+          <Link
+            href="/dashboard/checklists"
+            className={`${buttonVariants()} mt-2 gap-1.5`}
+          >
+            Create your first variant →
+          </Link>
+        </Can>
+        <div className="flex justify-start pt-2">
+          <Button variant="outline" onClick={onBack}>
+            Back
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Step 2a: pick a category.
+  if (!categoryCode) {
+    return (
+      <FieldGroup>
+        <p className="text-xs uppercase tracking-wider text-stone-500">
+          Service category
+        </p>
+        <ul className="grid gap-2">
+          {categories.map((c) => (
+            <li key={c.code}>
+              <button
+                type="button"
+                onClick={() => onCategoryChange(c.code)}
+                className="flex w-full items-center justify-between rounded-lg border border-stone-200 bg-white px-4 py-3 text-left transition-colors hover:bg-stone-50"
+              >
+                <div>
+                  <div className="font-medium">{c.name}</div>
+                  {c.description && (
+                    <div className="text-xs text-stone-500">{c.description}</div>
+                  )}
+                </div>
+                <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium text-stone-600">
+                  {c.variantCount} {c.variantCount === 1 ? "variant" : "variants"}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        <div className="flex justify-between pt-2">
+          <Button variant="outline" onClick={onBack}>
+            Back
+          </Button>
+        </div>
+      </FieldGroup>
+    );
+  }
+
+  // Step 2b: pick a variant within the chosen category.
+  const category = categories.find((c) => c.code === categoryCode);
+  const inCategory = variants.filter((v) => v.categoryCode === categoryCode);
+  const selected = inCategory.find((v) => v.id === variantId);
 
   return (
     <FieldGroup>
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-wider text-stone-500">
+            {category?.name ?? "Variants"}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onCategoryChange("")}
+          className="text-xs text-stone-500 underline-offset-2 hover:text-stone-800 hover:underline"
+        >
+          Change category
+        </button>
+      </div>
+
       <ul className="grid gap-2">
-        {options.map((s) => {
-          const isActive = s.id === value;
+        {inCategory.map((v) => {
+          const isActive = v.id === variantId;
           return (
-            <li key={s.id}>
+            <li key={v.id}>
               <button
                 type="button"
-                onClick={() => onChange(s.id)}
-                className={`flex w-full items-center justify-between rounded-lg border px-4 py-3 text-left transition-colors ${
+                onClick={() => onVariantChange(v.id)}
+                className={`flex w-full items-start justify-between gap-3 rounded-lg border px-4 py-3 text-left transition-colors ${
                   isActive
                     ? "border-[var(--navy)] bg-blue-50"
                     : "border-stone-200 bg-white hover:bg-stone-50"
                 }`}
               >
                 <div>
-                  <div className="font-medium">{s.name}</div>
-                  <div className="text-xs text-stone-500">{s.code}</div>
+                  <div className="font-medium">{v.name}</div>
+                  <div className="text-xs text-stone-500">{v.code}</div>
+                  {v.description && (
+                    <div className="mt-1 text-xs text-stone-600">
+                      {v.description}
+                    </div>
+                  )}
                 </div>
-                {!s.hasChecklist && (
-                  <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
-                    Checklist not yet defined
+                {v.typicalDurationDays !== null && (
+                  <span className="shrink-0 rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium text-stone-600">
+                    ~{v.typicalDurationDays}d
                   </span>
                 )}
               </button>
@@ -521,25 +646,11 @@ function ServiceStep({
         })}
       </ul>
 
-      {selected && !selected.hasChecklist && (
-        <p
-          role="alert"
-          className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
-        >
-          A service template hasn&apos;t been published for {selected.name} yet,
-          so cases can&apos;t be opened with this service. Add a checklist
-          first.
-        </p>
-      )}
-
       <div className="flex justify-between pt-2">
         <Button variant="outline" onClick={onBack}>
           Back
         </Button>
-        <Button
-          onClick={onNext}
-          disabled={!selected || !selected.hasChecklist}
-        >
+        <Button onClick={onNext} disabled={!selected}>
           Continue
         </Button>
       </div>
@@ -687,7 +798,7 @@ function ConfirmStep({
   onSubmit,
 }: {
   client: ClientChoice | null;
-  service: ServiceOption | undefined;
+  service: VariantOption | undefined;
   quotedFee: string;
   retainerMin: string;
   retainedAt: string;

@@ -70,22 +70,26 @@ export async function createCaseFolderStructure(
   const { data: templateDocs, error: tdErr } = await supabase
     .schema("ref")
     .from("template_documents")
-    .select("category")
+    .select("group_code")
     .eq("service_template_id", caseRow.service_template_id);
 
   if (tdErr) {
-    throw new Error(`Could not load template categories: ${tdErr.message}`);
+    throw new Error(`Could not load template groups: ${tdErr.message}`);
   }
 
-  const categoryCodes = [
-    ...new Set((templateDocs ?? []).map((d) => d.category)),
+  const groupCodes = [
+    ...new Set((templateDocs ?? []).map((d) => d.group_code)),
   ];
 
+  // ref.checklist_groups replaced ref.document_categories. Same shape, same
+  // seeded names — the OneDrive folder structure is unchanged because the
+  // group names ("01 Identity", "02 Education", ...) match what the old
+  // categories produced.
   const { data: categories } = await supabase
     .schema("ref")
-    .from("document_categories")
+    .from("checklist_groups")
     .select("code, name, display_order")
-    .in("code", categoryCodes)
+    .in("code", groupCodes)
     .order("display_order");
 
   const year = new Date(caseRow.opened_at).getFullYear().toString();

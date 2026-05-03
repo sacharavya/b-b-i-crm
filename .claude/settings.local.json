@@ -8,7 +8,39 @@
       "Bash(npm run *)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)",
       "Bash(npm install *)",
-      "Bash(curl -s -o /tmp/page.html -w \"HTTP %{http_code}\\\\n\" http://localhost:3000)"
+      "Bash(curl -s -o /tmp/page.html -w \"HTTP %{http_code}\\\\n\" http://localhost:3000)",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(npm view *)",
+      "Bash(cp src/app/globals.css /tmp/globals.css.bak)",
+      "Bash(npx shadcn@latest init -y --base-color slate)",
+      "Bash(npx shadcn@latest init --help)",
+      "Bash(npx shadcn@latest init -d --force)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:3000)",
+      "Bash(lsof -ti:3000)",
+      "Bash(xargs kill *)",
+      "Bash(curl -s -o /tmp/page2.html -w \"HTTP %{http_code}\\\\n\" http://localhost:3000)",
+      "Read(//tmp/**)",
+      "Bash(grep -v -E '^\\(node_modules|\\\\.next|\\\\.git|\\\\.DS_Store|\\\\.claude\\)$')",
+      "Read(//mnt/user-data/outputs/**)",
+      "Bash(find /mnt /tmp /Users/sacharavya/Desktop -maxdepth 4 -name \"schema-v1.sql\")",
+      "Bash(supabase --version)",
+      "Bash(docker version *)",
+      "Bash(npx --yes supabase@latest init)",
+      "Bash(open -a Docker)",
+      "Bash(docker info *)",
+      "Bash(npx --yes supabase@latest start)",
+      "Bash(npx --yes supabase@latest status)",
+      "Bash(grep -E \"^  \\(audit|crm|files|portal|ref|public\\): \\\\{$\" /Users/sacharavya/Desktop/b-b-i-crm/src/lib/supabase/types.ts)",
+      "Bash(npx --yes shadcn@latest add form input button card label -y)",
+      "Bash(npx --yes shadcn@latest add form -y)",
+      "Bash(npx --yes shadcn@latest add form -y --force)",
+      "Bash(npx --yes shadcn@latest add form --force)",
+      "Bash(git checkout *)",
+      "Bash(git clone *)",
+      "Bash(git add *)"
+    ],
+    "additionalDirectories": [
+      "/tmp"
     ]
   }
 }
